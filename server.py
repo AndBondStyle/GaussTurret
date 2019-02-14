@@ -15,8 +15,8 @@ class StreamHandler(BaseHTTPRequestHandler):
             event.wait(1)
             event.clear()
 
+            if self.source.frame is None: continue
             ok, jpg = cv2.imencode('.jpg', self.source.frame)
-            if not ok: break
             data = jpg.tobytes()
 
             self.wfile.write('--frame\r\n'.encode())
