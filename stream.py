@@ -1,14 +1,8 @@
+# Raspberry Pi | PyPI: picamera
 try:
     from picamera.array import PiRGBArray
     from picamera import PiCamera
-except:
-    # Mock classes to make everything work without picamera
-    PiRGBArray = lambda *args, **kwargs: None
-    PiCamera = type('PiCamera', (), {
-        'MAX_RESOLUTION': None,
-        'MAX_FRAMERATE': None,
-        '__init__': lambda *args, **kwargs: None
-    })
+except ImportError: pass
 
 from threading import Thread, Event
 from time import sleep
@@ -16,7 +10,7 @@ import cv2
 
 __all__ = [
     'BaseStream',
-    'PiStream',
+    'RPiStream',
     'CVStream',
     'FakeStream'
 ]
@@ -43,11 +37,11 @@ class BaseStream(Thread):
         self.join()
 
 
-class PiStream(BaseStream):
-    def __init__(self, resolution=None, framerate=None):
+class RPiStream(BaseStream):
+    def __init__(self, width=None, height=None, fps=None):
         super().__init__()
-        resolution = resolution or PiCamera.MAX_RESOLUTION
-        framerate = framerate or PiCamera.MAX_FRAMERATE
+        resolution = (width, height) if width and height else PiCamera.MAX_RESOLUTION
+        framerate = fps or PiCamera.MAX_FRAMERATE
         self.camera = PiCamera(resolution=resolution, framerate=framerate)
         self.capture = PiRGBArray(self.camera, size=resolution)
         self.stream = self.camera.capture_continuous(self.capture, format='bgr', use_video_port=True)
@@ -65,14 +59,12 @@ class PiStream(BaseStream):
 
 
 class CVStream(BaseStream):
-    def __init__(self, resolution=None, framerate=None):
+    def __init__(self, width=None, height=None, fps=None):
         super().__init__()
         self.capture = cv2.VideoCapture(0)
-        if resolution:
-            self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
-            self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
-        if framerate:
-            self.capture.set(cv2.CAP_PROP_FPS, framerate)
+        if width: self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        if height: self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        if fps: self.capture.set(cv2.CAP_PROP_FPS, fps)
 
     def run(self):
         while not self.stopped:
@@ -83,13 +75,15 @@ class CVStream(BaseStream):
 
 
 class FakeStream(BaseStream):
-    def __init__(self, **_):
+    def __init__(self, width=None, height=None, fps=None):
         super().__init__()
+        self.fps = fps or 10
         self.image = cv2.imread('dog.jpg')
+        if width and height: self.image = cv2.resize(self.image, (width, height))
 
     def run(self):
         while not self.stopped:
             self.image = cv2.rotate(self.image, cv2.ROTATE_90_CLOCKWISE)
             self.frame = self.image
             self.notify()
-            sleep(0.1)
+            sleep(1 / self.fps)

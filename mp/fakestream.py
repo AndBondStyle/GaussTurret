@@ -31,7 +31,7 @@ class BaseStream(mp.Process):
 class FakeStream(BaseStream):
     def __init__(self, buffer):
         super().__init__()
-        self.image = cv2.imread('test.jpg')
+        self.image = cv2.imread('dog.jpg')
         self.buffer = buffer
 
     def run(self):
