@@ -1,72 +1,44 @@
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from threading import Thread
-import argparse
+from multiprocessing import Process, Event
+from aiohttp import web
+import numpy as np
+import sys, os
 import cv2
 
 
-class StreamHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        event = self.source.subscribe()
-        self.send_response(200)
-        self.send_header('Content-type', 'multipart/x-mixed-replace; boundary=--frame')
-        self.end_headers()
-
-        while not self.server.stopped:
-            event.wait(1)
-            event.clear()
-
-            if self.source.frame is None: continue
-            ok, jpg = cv2.imencode('.jpg', self.source.frame)
-            data = jpg.tobytes()
-
-            self.wfile.write('--frame\r\n'.encode())
-            self.send_header('Content-type', 'image/jpeg')
-            self.send_header('Content-length', len(data))
-            self.end_headers()
-            self.wfile.write(data)
-
-
-class StreamServer(Thread):
-    def __init__(self, source, host='0.0.0.0', port=80):
+class Server(Process):
+    def __init__(self, buffer, event):
         super().__init__()
-        handler = type('Handler', (StreamHandler,), {'source': source})
-        self.server = HTTPServer((host, port), handler)
-        self.server.stopped = False
-        self.run = self.server.serve_forever
+        self.buffer = buffer
+        self.event = event
+        self.app = web.Application()
+        self.app.add_routes([
+            web.get('/', self.stream)
+        ])
 
-    def stop(self):
-        self.server.stopped = True
-        self.server.shutdown()
-        self.join()
+    def run(self):
+        self.frame = np.ctypeslib.as_array(self.buffer.get_obj())
+        self.frame = self.frame.reshape((200, 200, 3))
+        web.run_app(self.app, port=80)
 
+    async def stream(self, request):
+        response = web.StreamResponse()
+        response.content_type = 'multipart/x-mixed-replace; boundary=--frame'
+        response.enable_chunked_encoding()
+        await response.prepare(request)
 
-if __name__ == '__main__':
-    from camera import PiStream, CVStream, FakeStream
-    from detection import ArucoDetector
+        while True:  # TODO: FIX
+            self.event.wait()  # TODO: TIMEOUT?
+            self.event.clear()
 
-    streams = {
-        'pi': PiStream,
-        'cv': CVStream,
-        'fake': FakeStream,
-        'aruco+pi': lambda **k: ArucoDetector(PiStream(**k)),
-        'aruco+cv': lambda **k: ArucoDetector(CVStream(**k)),
-    }
+            _, jpeg = cv2.imencode('.jpg', self.frame)
+            jpeg = jpeg.tobytes()
 
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('--stream', choices=streams.keys(), default='fake')
-    parser.add_argument('--host', default='0.0.0.0')
-    parser.add_argument('--port', type=int, default=80)
-    parser.add_argument('--width', type=int, default=720)
-    parser.add_argument('--height', type=int, default=480)
-    parser.add_argument('--fps', type=int, default=30)
-    args = parser.parse_args()
+            data = '\r\n'.join((
+                '--frame',
+                'Content-type: image/jpeg',
+                'Content-length: %s' % len(jpeg),
+                '', ''  # It just works!
+            )).encode() + jpeg
 
-    resolution = (args.width, args.height) if args.width and args.height else None
-    stream = streams[args.stream](resolution=resolution, framerate=args.fps)
-    server = StreamServer(stream, args.host, args.port)
-    stream.start()
-    server.start()
-    print('SERVER READY - ENTER TO TERMINATE')
-    input()
-    stream.stop()
-    server.stop()
+            try: await response.write(data)
+            except: return  # TODO: ???
