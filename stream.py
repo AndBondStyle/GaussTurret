@@ -78,12 +78,14 @@ class FakeStream(BaseStream):
     def __init__(self, width=None, height=None, fps=None):
         super().__init__()
         self.fps = fps or 10
-        self.image = cv2.imread('dog.jpg')
-        if width and height: self.image = cv2.resize(self.image, (width, height))
+        self.image = cv2.imread('data/dog.jpg')
+        self.size = (width, height) if width and height else None
+        if self.size: self.image = cv2.resize(self.image, self.size)
 
     def run(self):
         while not self.stopped:
             self.image = cv2.rotate(self.image, cv2.ROTATE_90_CLOCKWISE)
+            if self.size: self.image = cv2.resize(self.image, self.size)
             self.frame = self.image
             self.notify()
             sleep(1 / self.fps)

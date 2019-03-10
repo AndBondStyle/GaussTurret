@@ -1,3 +1,4 @@
+from server import Server
 from stream import *
 from motion import *
 import cv2
@@ -25,19 +26,25 @@ PARAMS = {
     'ROTATION_RANGE': 0,     # Rotation range limit (0 = no limits)
     'SLEEP_TIMEOUT': 5,      # Time to wait before disabling stepper
     'FIRE_PULSE': 0.1,       # Fire pulse length (seconds)
+    'RECHARGE_TIME': 5,      # Aka minimal time between shots
+    'MIN_PWM': 0,            # Min servo PWM
+    'MAX_PWM': 50,           # Max servo PWM
 }
 
-ARMING_TIMEOUT = 5           # Time to wait before arming
+ARMING_TIMEOUT = 5                   # Time to wait before arming
+HAAR_PATH = 'data/face_default.xml'  # Path to haar cascade file
 
 
 class Core(BaseStream):
     def __init__(self):
         super().__init__()
         self.stream = STREAM(width=WIDTH, height=HEIGHT, fps=FPS)
+        self.motion = MOTION(PARAMS)
+        self.server = Server(self)
         self.event = self.stream.subscribe()
 
         self.aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_250)
-        self.face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+        self.face_cascade = cv2.CascadeClassifier(HAAR_PATH)
 
         self.frame = None
         self.gray = None
@@ -56,7 +63,7 @@ class Core(BaseStream):
             scaleFactor=1.1,
             minNeighbors=5,
             minSize=(30, 30),
-            flags=cv2.cv.CV_HAAR_SCALE_IMAGE
+            flags=cv2.CASCADE_SCALE_IMAGE
         )
         # TODO: Prettify data
         # TODO: Draw
@@ -67,6 +74,10 @@ class Core(BaseStream):
         self.join()
 
     def run(self):
+        self.stream.start()
+        self.motion.start()
+        self.server.start()
+
         while not self.stopped:
             self.event.wait()
             if self.stopped: break
@@ -82,11 +93,17 @@ class Core(BaseStream):
             self.process_faces()
             self.notify()
 
+        print('STOPPING STREAM THREAD...')
         self.stream.stop()
+        print('STOPPING MOTION THREAD...')
+        self.motion.stop()
+        print('STOPPING SERVER THREAD...')
+        self.server.stop()
+        print('TERMINATED')
 
 
 if __name__ == '__main__':
     core = Core()
     core.start()
-    input('ENTER TO TERMINATE\n')
+    input('ENTER TO TERMINATE\n\n')
     core.stop()
