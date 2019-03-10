@@ -99,8 +99,8 @@ class FakeMotion(BaseMotion):
 class OPiMotion(BaseMotion):
     def __init__(self, pins, params):
         super().__init__(params)
-        GPIO.setmode(GPIO.SUNXI)
         GPIO.setboard(GPIO.ZEROPLUS2H5)
+        GPIO.setmode(GPIO.BOARD)
 
         GPIO.setup(pins['ENABLE'], GPIO.OUT)
         GPIO.setup(pins['STEP'], GPIO.OUT)
@@ -109,7 +109,7 @@ class OPiMotion(BaseMotion):
         GPIO.setup(pins['FIRE'], GPIO.OUT)
 
         self.enable_pin = lambda x: GPIO.output(pins['ENABLE'], x)
-        self.step_pin = lambda x: GPIO.output(pins['STEP'], x)
+        self.step_pin = lambda x: print('step') or GPIO.output(pins['STEP'], x)
         self.dir_pin = lambda x: GPIO.output(pins['DIR'], x)
         self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
         self.fire_pin = lambda x: GPIO.output(pins['FIRE'], x)
