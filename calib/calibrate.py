@@ -20,7 +20,7 @@ def main(args):
         print('Processing %s... ' % filename, end='')
         image = cv2.imread(filename, 0)
         if image is None: print('FAIL: Read error'); continue
-        if (width, height) != image.shape: print('FAIL: Size mismatch'); continue
+        if (height, width) != image.shape: print('FAIL: Size mismatch'); continue
         ok, corners = cv2.findChessboardCorners(image, pattern_size)
         if not ok: print('FAIL: Chessboard not found'); continue
 
