@@ -6,7 +6,7 @@ import time
 import cv2
 
 
-STREAM = FakeStream          # Stream handler
+STREAM = CVStream            # Stream handler
 WIDTH = 320                  # Frame width (None = max)
 HEIGHT = 240                 # Frame height (None = max)
 FPS = None                   # Stream FPS (None = max)
@@ -41,7 +41,7 @@ ARMING_TEXT_POS = (5, 20)                  # Arming status text param: position
 FACE_HAAR_PATH = 'data/face_default.xml'   # Path to haar cascade file (for face detection)
 FACE_SCALE_FACTOR = 1.1                    # Face detection param: scaleFactor
 FACE_MIN_NEIGHBOURS = 5                    # Face detection param: minNeighbours
-FACE_MINSIZE = (30, 30)                    # Face detection param: minSize
+FACE_MIN_SIZE = (50, 50)                 # Face detection param: minSize
 FACE_FLAGS = cv2.CASCADE_SCALE_IMAGE       # Face detection param: flags
 
 CAMERA_MATRIX = np.array([                 # Camera matrix coefficients (calibration result)
@@ -57,7 +57,7 @@ CAMERA_DISTORTION = np.array([             # Camera distortion coefficients (cal
     -1.22638201e+02,
 ])
 
-MARKERS_DICT = cv2.aruco.DICT_6X6_50      # Aruco markers dict
+MARKERS_DICT = cv2.aruco.DICT_6X6_50       # Aruco markers dict
 MARKER_LENGTH = 33                         # Marker side length (mm)
 
 
@@ -84,20 +84,21 @@ class Core(BaseStream):
     def process_markers(self):
         corners, ids, _ = cv2.aruco.detectMarkers(self.gray, self.aruco_dict)
         self.markers = []
-        if not ids: return
-        self.markers = [{'id': i, 'corners': c} for c, i in zip(corners, ids)]
+        if ids is None: return
+        self.markers = [{'id': int(i[0]), 'corners': c.astype(int).tolist()} for c, i in zip(corners, ids)]
         rvec, tvec, _ = cv2.aruco.estimatePoseSingleMarkers(corners, MARKER_LENGTH, CAMERA_MATRIX, CAMERA_DISTORTION)
-        for i in self.markers: i.update(rvec=rvec, tvec=tvec)
-        cv2.aruco.drawDetectedMarkers(self.frame, corners, ids, (0, 0, 255))
+        for i in self.markers: i.update(rvec=rvec.tolist(), tvec=tvec.tolist())
+        cv2.aruco.drawDetectedMarkers(self.frame, corners, borderColor=(0, 0, 255))
 
     def process_faces(self):
-        self.faces = list(self.face_cascade.detectMultiScale(
+        faces = self.face_cascade.detectMultiScale(
             self.gray,
             scaleFactor=FACE_SCALE_FACTOR,
             minNeighbors=FACE_MIN_NEIGHBOURS,
-            minSize=FACE_MINSIZE,
+            minSize=FACE_MIN_SIZE,
             flags=FACE_FLAGS
-        ))
+        )
+        self.faces = [] if not len(faces) else faces.tolist()
 
         if self.faces:
             self.motion.armed = False
@@ -105,7 +106,7 @@ class Core(BaseStream):
         elif time.time() - self.last_face_time >= ARMING_TIMEOUT:
             self.motion.armed = True
 
-        for (x, y, w, h) in self.faces: cv2.rectangle(self.frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        for (x, y, w, h) in self.faces: cv2.rectangle(self.frame, (x, y), (x + w, y + h), (0, 255, 0), 1)
         if self.motion.armed: self.draw_arming_text(self.frame, 'ARMED', (0, 0, 255))
         elif self.faces: self.draw_arming_text(self.frame, 'DISARMED', (0, 255, 0))
         else: self.draw_arming_text(self.frame, 'ARMING', (0, 200, 255))
