@@ -1,6 +1,8 @@
 from server import Server
 from stream import *
 from motion import *
+import numpy as np
+import time
 import cv2
 
 
@@ -31,8 +33,32 @@ PARAMS = {
     'MAX_PWM': 50,           # Max servo PWM
 }
 
-ARMING_TIMEOUT = 5                   # Time to wait before arming
-HAAR_PATH = 'data/face_default.xml'  # Path to haar cascade file
+ARMING_TIMEOUT = 5                         # Time to wait before arming
+ARMING_TEXT_FONT = cv2.FONT_HERSHEY_PLAIN  # Arming status text param: font
+ARMING_TEXT_FONT_SCALE = 1.5               # Arming status text param: scale
+ARMING_TEXT_POS = (5, 20)                  # Arming status text param: position
+
+FACE_HAAR_PATH = 'data/face_default.xml'   # Path to haar cascade file (for face detection)
+FACE_SCALE_FACTOR = 1.1                    # Face detection param: scaleFactor
+FACE_MIN_NEIGHBOURS = 5                    # Face detection param: minNeighbours
+FACE_MINSIZE = (30, 30)                    # Face detection param: minSize
+FACE_FLAGS = cv2.CASCADE_SCALE_IMAGE       # Face detection param: flags
+
+CAMERA_MATRIX = np.array([                 # Camera matrix coefficients (calibration result)
+    [544.70473098, 0.0, 177.46434358],
+    [0.0, 547.27945612, 146.11552008],
+    [0.0, 0.0, 1.0],
+])
+CAMERA_DISTORTION = np.array([             # Camera distortion coefficients (calibration result)
+    5.37779339e-01,
+    9.15783371e+00,
+    4.65765217e-03,
+    -1.17879940e-02,
+    -1.22638201e+02,
+])
+
+MARKERS_DICT = cv2.aruco.DICT_6X6_50      # Aruco markers dict
+MARKER_LENGTH = 33                         # Marker side length (mm)
 
 
 class Core(BaseStream):
@@ -43,8 +69,12 @@ class Core(BaseStream):
         self.server = Server(self)
         self.event = self.stream.subscribe()
 
-        self.aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_250)
-        self.face_cascade = cv2.CascadeClassifier(HAAR_PATH)
+        self.aruco_dict = cv2.aruco.Dictionary_get(MARKERS_DICT)
+        self.face_cascade = cv2.CascadeClassifier(FACE_HAAR_PATH)
+        self.draw_arming_text = lambda img, text, color: cv2.putText(
+            img, text, ARMING_TEXT_POS, ARMING_TEXT_FONT, ARMING_TEXT_FONT_SCALE, color, 1
+        )
+        self.last_face_time = time.time()
 
         self.frame = None
         self.gray = None
@@ -52,21 +82,33 @@ class Core(BaseStream):
         self.faces = []
 
     def process_markers(self):
-        corners, ids, rejected = cv2.aruco.detectMarkers(self.gray, self.aruco_dict)
-        # TODO: Prettify data
-        # TODO: Custom draw
-        self.frame = cv2.aruco.drawDetectedMarkers(self.frame, corners)
+        corners, ids, _ = cv2.aruco.detectMarkers(self.gray, self.aruco_dict)
+        self.markers = []
+        if not ids: return
+        self.markers = [{'id': i, 'corners': c} for c, i in zip(corners, ids)]
+        rvec, tvec, _ = cv2.aruco.estimatePoseSingleMarkers(corners, MARKER_LENGTH, CAMERA_MATRIX, CAMERA_DISTORTION)
+        for i in self.markers: i.update(rvec=rvec, tvec=tvec)
+        cv2.aruco.drawDetectedMarkers(self.frame, corners, ids, (0, 0, 255))
 
     def process_faces(self):
-        faces = self.face_cascade.detectMultiScale(
+        self.faces = list(self.face_cascade.detectMultiScale(
             self.gray,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(30, 30),
-            flags=cv2.CASCADE_SCALE_IMAGE
-        )
-        # TODO: Prettify data
-        # TODO: Draw
+            scaleFactor=FACE_SCALE_FACTOR,
+            minNeighbors=FACE_MIN_NEIGHBOURS,
+            minSize=FACE_MINSIZE,
+            flags=FACE_FLAGS
+        ))
+
+        if self.faces:
+            self.motion.armed = False
+            self.last_face_time = time.time()
+        elif time.time() - self.last_face_time >= ARMING_TIMEOUT:
+            self.motion.armed = True
+
+        for (x, y, w, h) in self.faces: cv2.rectangle(self.frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        if self.motion.armed: self.draw_arming_text(self.frame, 'ARMED', (0, 0, 255))
+        elif self.faces: self.draw_arming_text(self.frame, 'DISARMED', (0, 255, 0))
+        else: self.draw_arming_text(self.frame, 'ARMING', (0, 200, 255))
 
     def stop(self):
         self.stopped = True
@@ -93,17 +135,17 @@ class Core(BaseStream):
             self.process_faces()
             self.notify()
 
-        print('STOPPING STREAM THREAD...')
+        print('[CORE] STOPPING STREAM THREAD...')
         self.stream.stop()
-        print('STOPPING MOTION THREAD...')
+        print('[CORE] STOPPING MOTION THREAD...')
         self.motion.stop()
-        print('STOPPING SERVER THREAD...')
+        print('[CORE] STOPPING SERVER THREAD...')
         self.server.stop()
-        print('TERMINATED')
+        print('[CORE] TERMINATED')
 
 
 if __name__ == '__main__':
     core = Core()
     core.start()
-    input('ENTER TO TERMINATE\n\n')
+    input('[CORE] ENTER TO TERMINATE\n\n')
     core.stop()

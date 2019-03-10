@@ -26,11 +26,11 @@ class BaseMotion(Thread):
         self.max_pwm = params['MAX_PWM']
         self.pwm_range = self.max_pwm - self.min_pwm
 
-        self.enable_pin = lambda x: print('ENABLE PIN ->', 'ON' if x else 'OFF')
-        self.step_pin = lambda x: print('STEP PIN ->', 'ON' if x else 'OFF')
-        self.dir_pin = lambda x: print('DIR PIN ->', 'ON' if x else 'OFF')
-        self.pwm_pin = lambda x: print('PWM PIN ->', x)
-        self.fire_pin = lambda x: print('FIRE PIN ->', 'ON' if x else 'OFF')
+        self.enable_pin = lambda x: print('[M] ENABLE PIN ->', 'ON' if x else 'OFF')
+        self.step_pin = lambda x: print('[M] STEP PIN ->', 'ON' if x else 'OFF')
+        self.dir_pin = lambda x: print('[M] DIR PIN ->', 'ON' if x else 'OFF')
+        self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
+        self.fire_pin = lambda x: print('[M] FIRE PIN ->', 'ON' if x else 'OFF')
 
         self.stopped = False
         self.onborder = False
