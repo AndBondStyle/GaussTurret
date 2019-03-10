@@ -26,11 +26,11 @@ class BaseMotion(Thread):
         self.max_pwm = params['MAX_PWM']
         self.pwm_range = self.max_pwm - self.min_pwm
 
-        self.enable_pin = lambda x: print('[M] ENABLE PIN ->', 'ON' if x else 'OFF')
-        self.step_pin = lambda x: print('[M] STEP PIN ->', 'ON' if x else 'OFF')
-        self.dir_pin = lambda x: print('[M] DIR PIN ->', 'ON' if x else 'OFF')
-        self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
-        self.fire_pin = lambda x: print('[M] FIRE PIN ->', 'ON' if x else 'OFF')
+        self.enable_pin = None
+        self.step_pin = None
+        self.dir_pin = None
+        self.pwm_pin = None
+        self.fire_pin = None
 
         self.stopped = False
         self.onborder = False
@@ -60,13 +60,13 @@ class BaseMotion(Thread):
                 self.sleep.wait(self.sleep_timeout)
                 if self.stopped: break
                 if not self.sleep.is_set():
-                    self.enable_pin(False)
+                    self.enable_pin(True)
                     continue
 
-            self.enable_pin(True)
+            self.enable_pin(False)
             self.step_pin(False)
             self.pwm_pin(self.min_pwm + self.angle * self.pwm_range)
-            self.dir_pin(self.rotation > 0 ^ self.reverse)
+            self.dir_pin((self.rotation > 0) ^ self.reverse)
 
             if abs(self.rotation) < 1 / self.revolution:
                 self.rotation = 0
@@ -84,3 +84,36 @@ class BaseMotion(Thread):
             self.step_pin(True)
             speed = self.speed if not self.slowmode else self.slowspeed
             sleep(1 / speed)
+
+
+class FakeMotion(BaseMotion):
+    def __init__(self, _, params):
+        super().__init__(params)
+        self.enable_pin = lambda x: print('[M] ENABLE PIN ->', 'ON' if x else 'OFF')
+        self.step_pin = lambda x: print('[M] STEP PIN ->', 'ON' if x else 'OFF')
+        self.dir_pin = lambda x: print('[M] DIR PIN ->', 'ON' if x else 'OFF')
+        self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
+        self.fire_pin = lambda x: print('[M] FIRE PIN ->', 'ON' if x else 'OFF')
+
+
+class OPiMotion(BaseMotion):
+    def __init__(self, pins, params):
+        super().__init__(params)
+        GPIO.setmode(GPIO.SUNXI)
+        GPIO.setboard(GPIO.ZEROPLUS2H5)
+
+        GPIO.setup(pins['ENABLE'], GPIO.OUT)
+        GPIO.setup(pins['STEP'], GPIO.OUT)
+        GPIO.setup(pins['DIR'], GPIO.OUT)
+        # GPIO.setup(pins['PWM'], GPIO.OUT)
+        GPIO.setup(pins['FIRE'], GPIO.OUT)
+
+        self.enable_pin = lambda x: GPIO.output(pins['ENABLE'], x)
+        self.step_pin = lambda x: GPIO.output(pins['STEP'], x)
+        self.dir_pin = lambda x: GPIO.output(pins['DIR'], x)
+        self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
+        self.fire_pin = lambda x: GPIO.output(pins['FIRE'], x)
+
+    def stop(self):
+        super().stop()
+        GPIO.cleanup()

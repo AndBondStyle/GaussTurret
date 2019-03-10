@@ -3,8 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <title>GaussTurret</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/vue"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.18.0/axios.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css?family=Ubuntu+Mono');
+
+        * {
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: inherit;
+            color: inherit;
+        }
+
+        *:focus {
+            outline: none;
+        }
+
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+
+            background: #1d1e22;
+            color: #cdcfde;
+            font-family: "Ubuntu Mono", monospace;
+            font-size: 18pt;
+        }
+
+        #app {
+            max-width: 1200px;
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: stretch;
+            flex-wrap: wrap;
+        }
+
+        .button {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid #cdcfde;
+            cursor: pointer;
+            text-align: center;
+            user-select: none;
+        }
+
+        .button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .button.disabled {
+            color: rgba(255, 255, 255, 0.2);
+            background: transparent;
+            cursor: default;
+        }
+
+        .stream {
+            border: 2px solid #cdcfde;
+            display: block;
+            height: 50vh;
+        }
+
+        .right {
+            width: 500px;
+            padding: 15px 30px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .right > * {
+            margin: 15px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+        }
+
+        .status {
+            display: grid;
+            grid-template: repeat(2, 1fr) / repeat(2, 1fr);
+            width: 100%;
+        }
+
+        .controls > *, .status > * {
+            margin: -1px;
+        }
+    </style>
 </head>
 <body>
-
+    <div id="app">
+        <img src="http://localhost/stream" class="stream"/>
+        <div class="right">
+            <div class="status">
+                <div class="button">FIRE</div>
+                <div class="button">FIRE</div>
+                <div class="button">FIRE</div>
+                <div class="button">FIRE</div>
+            </div>
+            <div class="controls">
+                <div></div>
+                <div class="button">↑</div>
+                <div></div>
+                <div class="button"
+                     @mousedown="control('motion.rotation', -1)"
+                     @mouseup="control('motion.rotation', 0)"
+                >←</div>
+                <div class="button"
+                     v-bind:class="{disabled: !status.armed}"
+                     @click="control('motion.fire', [], 'call')"
+                >FIRE</div>
+                <div class="button"
+                     @mousedown="control('motion.rotation', 1)"
+                     @mouseup="control('motion.rotation', 0)"
+                >→</div>
+                <div></div>
+                <div class="button">↓</div>
+                <div></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                status: {}
+            },
+            async mounted() {
+                let update = async function () {
+                    let res = await axios.get('/status');
+                    Vue.set(this, 'status', res.data);
+                    setTimeout(update.bind(this), 500);
+                };
+                await update.bind(this)();
+            },
+            methods: {
+                control(target, value, action='set') {
+                    axios.post('/control', {target, value, action})
+                }
+            }
+        })
+    </script>
 </body>
 </html>

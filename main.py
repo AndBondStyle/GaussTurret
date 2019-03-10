@@ -12,15 +12,15 @@ HEIGHT = 240                 # Frame height (None = max)
 FPS = None                   # Stream FPS (None = max)
 FLIP = None                  # Frame flip mode (0 = H | 1 = V | -1 = both | None = no flip)
 
-MOTION = BaseMotion          # Motion handler
-PINS = {
-    'ENABLE': 0,             # A4988 enable pin
-    'STEP': 0,               # A4988 step pin
-    'DIR': 0,                # A4988 dir pin
-    'PWM': 0,                # Servo PWM pin
-    'FIRE': 0,               # Fire pin
+MOTION = FakeMotion          # Motion handler
+MOTION_PINS = {
+    'ENABLE': 3,             # A4988 enable pin
+    'STEP': 8,               # A4988 step pin
+    'DIR': 10,               # A4988 dir pin
+    'PWM': 7,                # Servo PWM pin
+    'FIRE': 5,               # Fire pin
 }
-PARAMS = {
+MOTION_PARAMS = {
     'SPEED': 10,             # Normal speed (steps per second)
     'SLOWSPEED': 5,          # Slow speed (steps per second)
     'REVERSE': False,        # Reverse direction
@@ -65,7 +65,7 @@ class Core(BaseStream):
     def __init__(self):
         super().__init__()
         self.stream = STREAM(width=WIDTH, height=HEIGHT, fps=FPS)
-        self.motion = MOTION(PARAMS)
+        self.motion = MOTION(MOTION_PINS, MOTION_PARAMS)
         self.server = Server(self)
         self.event = self.stream.subscribe()
 

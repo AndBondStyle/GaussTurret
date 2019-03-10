@@ -8,30 +8,43 @@ class Server(Thread):
     def __init__(self, core):
         super().__init__()
         self.core = core
+        self.motion = core.motion
         self.event = self.core.subscribe()
         self.stopped = False
         self.loop = None
         self.runner = None
         self.app = web.Application()
         self.app.add_routes([
+            web.get('/', self.index),
+            web.post('/control', self.control),
             web.get('/stream', self.stream),
-            web.get('/status', self.status)
+            web.get('/status', self.status),
         ])
+
+    async def index(self, _):
+        return web.FileResponse('index.html')
+
+    async def control(self, request):
+        data = await request.json()
+        print(data)
+        propchain = data['target'].split('.')
+        prev, last = self, self
+        for i in propchain: prev, last = last, getattr(last, i)
+        if data['action'] == 'set': setattr(prev, propchain[-1], data['value'])
+        elif data['action'] == 'call': last(*data.get('value', []))
+        self.motion.update()
+        return web.Response(text='OK')
 
     async def status(self, _):
         data = {
-            'motion': {
-                'onborder': self.core.motion.onborder,
-                'armed': self.core.motion.armed,
-                'slowmode': self.core.motion.slowmode,
-                'abs_rotation': self.core.motion.abs_rotation,
-                'rotation': self.core.motion.rotation,
-                'angle': self.core.motion.angle,
-            },
-            'core': {
-                'faces': self.core.faces,
-                'markers': self.core.markers,
-            }
+            'onborder': self.core.motion.onborder,
+            'armed': self.core.motion.armed,
+            'slowmode': self.core.motion.slowmode,
+            'abs_rotation': self.core.motion.abs_rotation,
+            'rotation': self.core.motion.rotation,
+            'angle': self.core.motion.angle,
+            'faces': self.core.faces,
+            'markers': self.core.markers,
         }
         return web.json_response(data)
 
