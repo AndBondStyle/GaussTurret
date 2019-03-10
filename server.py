@@ -12,7 +12,6 @@ class Server(Thread):
         self.stopped = False
         self.loop = None
         self.runner = None
-        self.site = None
         self.app = web.Application()
         self.app.add_routes([
             web.get('/stream', self.stream),
@@ -30,7 +29,8 @@ class Server(Thread):
                 'angle': self.core.motion.angle,
             },
             'core': {
-                # TODO
+                'faces': self.core.faces,
+                'markers': self.core.markers,
             }
         }
         return web.json_response(data)
@@ -56,12 +56,13 @@ class Server(Thread):
                 '', ''  # It just works!
             )).encode() + jpeg
 
+            # Let asyncio handle other requests
+            await asyncio.sleep(0)
             try: await response.write(data)
             except: break
 
     def run(self):
         self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
         asyncio.run_coroutine_threadsafe(self.run_async(), self.loop)
         self.loop.run_forever()
 
