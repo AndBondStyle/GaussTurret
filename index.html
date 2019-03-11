@@ -103,29 +103,37 @@
 </head>
 <body>
     <div id="app">
-        <img src="http://localhost/stream" class="stream"/>
+        <img v-if="stream" src="/stream" class="stream"/>
         <div class="right">
             <div class="status">
-                <div class="button">FIRE</div>
-                <div class="button">FIRE</div>
-                <div class="button">FIRE</div>
-                <div class="button">FIRE</div>
+                <div class="button" @click="stream = !stream">
+                    STREAM: {{ stream ? 'ON' : 'OFF'}}
+                </div>
+                <div class="button" @click="api('motion.slowmode', !status.slowmode)">
+                    SPEED: {{ status.slowmode ? 'SLOW' : 'NORM'}}
+                </div>
+                <div class="button" @click="stepmode = !stepmode">
+                    MOVEMODE: {{ stepmode ? 'STEP' : 'HOLD' }}
+                </div>
+                <div class="button">-</div>
             </div>
             <div class="controls">
                 <div></div>
                 <div class="button">↑</div>
                 <div></div>
                 <div class="button"
-                     @mousedown="control('motion.rotation', -1)"
-                     @mouseup="control('motion.rotation', 0)"
+                     @mousedown="move('left')"
+                     @mouseup="if (!stepmode) api('motion.rotation', 0)"
+                     v-bind:class="{disabled: status.onborder && status.rotation < 0}"
                 >←</div>
                 <div class="button"
                      v-bind:class="{disabled: !status.armed}"
-                     @click="control('motion.fire', [], 'call')"
+                     @click="api('motion.fire', [], 'call')"
                 >FIRE</div>
                 <div class="button"
-                     @mousedown="control('motion.rotation', 1)"
-                     @mouseup="control('motion.rotation', 0)"
+                     @mousedown="move('right')"
+                     @mouseup="if (!stepmode) api('motion.rotation', 0)"
+                     v-bind:class="{disabled: status.onborder && status.rotation > 0}"
                 >→</div>
                 <div></div>
                 <div class="button">↓</div>
@@ -137,19 +145,28 @@
         new Vue({
             el: '#app',
             data: {
-                status: {}
+                status: {},
+                stream: true,
+                stepmode: true,
             },
             async mounted() {
                 let update = async function () {
                     let res = await axios.get('/status');
                     Vue.set(this, 'status', res.data);
-                    setTimeout(update.bind(this), 500);
+                    setTimeout(update.bind(this), 50);
                 };
                 await update.bind(this)();
             },
             methods: {
-                control(target, value, action='set') {
-                    axios.post('/control', {target, value, action})
+                api(target, value, action='set') {
+                    axios.post('/api', {target, value, action})
+                },
+                move(dir) {
+                    if (dir === 'left' || dir === 'right') {
+                        let value = this.stepmode ? 1 / this.status.revolution : 1;
+                        if (dir === 'left') value *= -1;
+                        this.api('motion.rotation', value)
+                    }
                 }
             }
         })

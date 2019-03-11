@@ -16,7 +16,7 @@ class Server(Thread):
         self.app = web.Application()
         self.app.add_routes([
             web.get('/', self.index),
-            web.post('/control', self.control),
+            web.post('/api', self.api),
             web.get('/stream', self.stream),
             web.get('/status', self.status),
         ])
@@ -24,9 +24,8 @@ class Server(Thread):
     async def index(self, _):
         return web.FileResponse('index.html')
 
-    async def control(self, request):
+    async def api(self, request):
         data = await request.json()
-        print(data)
         propchain = data['target'].split('.')
         prev, last = self, self
         for i in propchain: prev, last = last, getattr(last, i)
@@ -42,9 +41,12 @@ class Server(Thread):
             'slowmode': self.core.motion.slowmode,
             'abs_rotation': self.core.motion.abs_rotation,
             'rotation': self.core.motion.rotation,
+            'revolution': self.core.motion.revolution,
             'angle': self.core.motion.angle,
             'faces': self.core.faces,
             'markers': self.core.markers,
+            'handlers': list(self.core.handlers.keys()),
+            'handler': self.core.handler,
         }
         return web.json_response(data)
 

@@ -12,13 +12,13 @@ HEIGHT = 240                 # Frame height (None = max)
 FPS = None                   # Stream FPS (None = max)
 FLIP = None                  # Frame flip mode (0 = H | 1 = V | -1 = both | None = no flip)
 
-MOTION = OPiMotion           # Motion handler
+MOTION = FakeMotion          # Motion handler
 MOTION_PINS = {
     'ENABLE': 11,            # A4988 enable pin
     'STEP': 3,               # A4988 step pin
     'DIR': 5,                # A4988 dir pin
     'PWM': 7,                # Servo PWM pin
-    'FIRE': 13,               # Fire pin
+    'FIRE': 13,              # Fire pin
 }
 MOTION_PARAMS = {
     'SPEED': 30,             # Normal speed (steps per second)
@@ -59,6 +59,11 @@ CAMERA_DISTORTION = np.array([             # Camera distortion coefficients (cal
 
 MARKERS_DICT = cv2.aruco.DICT_6X6_50       # Aruco markers dict
 MARKER_LENGTH = 33                         # Marker side length (mm)
+AIM_THRESHOLD = 5
+
+LOGIC_HANDLERS = {
+    'NaiveTrackingHandler'
+}
 
 
 class Core(BaseStream):
@@ -69,6 +74,7 @@ class Core(BaseStream):
         self.server = Server(self)
         self.event = self.stream.subscribe()
 
+        self.handlers = {globals()[i].name: globals()[i] for i in LOGIC_HANDLERS}
         self.aruco_dict = cv2.aruco.Dictionary_get(MARKERS_DICT)
         self.face_cascade = cv2.CascadeClassifier(FACE_HAAR_PATH)
         self.draw_arming_text = lambda img, text, color: cv2.putText(
@@ -76,16 +82,36 @@ class Core(BaseStream):
         )
         self.last_face_time = time.time()
 
+        self.handler = None
         self.frame = None
         self.gray = None
         self.markers = []
         self.faces = []
 
+    def set_handler(self, name):
+        if self.handler is not None: self.handler.stop()
+        self.handler = self.handlers[name](self)
+        self.handler.start()
+
+    def aim_to_coords(self, x, y):  # TODO
+        delta = WIDTH / 2 - x
+        if abs(delta) <= AIM_THRESHOLD: return
+        if delta < 0: self.motion.rotation = -1; print('left')
+        else: self.motion.rotation = 1; print('right')
+        self.motion.update()
+
     def process_markers(self):
         corners, ids, _ = cv2.aruco.detectMarkers(self.gray, self.aruco_dict)
         self.markers = []
         if ids is None: return
-        self.markers = [{'id': int(i[0]), 'corners': c.astype(int).tolist()} for c, i in zip(corners, ids)]
+        centers = [np.mean(c[0], axis=0).astype(int).tolist() for c in corners]
+        print('CORNERS:', corners)
+        print('CENTERS:', centers)
+        self.markers = [{
+            'id': int(id[0]),
+            'corners': co.astype(int).tolist(),
+            'center': ce
+        } for co, id, ce in zip(corners, ids, centers)]
         rvec, tvec, _ = cv2.aruco.estimatePoseSingleMarkers(corners, MARKER_LENGTH, CAMERA_MATRIX, CAMERA_DISTORTION)
         for i in self.markers: i.update(rvec=rvec.tolist(), tvec=tvec.tolist())
         cv2.aruco.drawDetectedMarkers(self.frame, corners, borderColor=(0, 0, 255))
@@ -143,6 +169,31 @@ class Core(BaseStream):
         print('[CORE] STOPPING SERVER THREAD...')
         self.server.stop()
         print('[CORE] TERMINATED')
+
+
+class NaiveTrackingHandler(Thread):
+    name = 'Naive Tracker'
+
+    def __init__(self, core):
+        super().__init__()
+        self.core = core
+        self.motion = self.core.motion
+        self.event = self.core.subscribe()
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+        self.event.set()
+        self.join()
+
+    def run(self):
+        while not self.stopped:
+            self.event.wait()
+            if self.stopped: break
+            self.event.clear()
+            if not self.core.markers: continue
+            marker = self.core.markers[0]
+            self.core.aim_to_coords(*marker['center'])
 
 
 if __name__ == '__main__':
