@@ -122,8 +122,8 @@
                 <div class="button">↑</div>
                 <div></div>
                 <div class="button"
-                     @mousedown="move('left')"
-                     @mouseup="if (!stepmode) api('motion.rotation', 0)"
+                     @mousedown="api('motion.' + (stepmode ? 'step' : 'rotate'), [1], 'call')"
+                     @mouseup="api('motion.rotate', [0], 'call')"
                      v-bind:class="{disabled: status.onborder && status.rotation < 0}"
                 >←</div>
                 <div class="button"
@@ -131,8 +131,8 @@
                      @click="api('motion.fire', [], 'call')"
                 >FIRE</div>
                 <div class="button"
-                     @mousedown="move('right')"
-                     @mouseup="if (!stepmode) api('motion.rotation', 0)"
+                     @mousedown="api('motion.' + (stepmode ? 'step' : 'rotate'), [1], 'call')"
+                     @mouseup="api('motion.rotate', [0], 'call')"
                      v-bind:class="{disabled: status.onborder && status.rotation > 0}"
                 >→</div>
                 <div></div>
@@ -160,13 +160,6 @@
             methods: {
                 api(target, value, action='set') {
                     axios.post('/api', {target, value, action})
-                },
-                move(dir) {
-                    if (dir === 'left' || dir === 'right') {
-                        let value = this.stepmode ? 1 / this.status.revolution : 1;
-                        if (dir === 'left') value *= -1;
-                        this.api('motion.rotation', value)
-                    }
                 }
             }
         })

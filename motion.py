@@ -29,11 +29,11 @@ class BaseMotion(Thread):
         self.enable_pin = None
         self.step_pin = None
         self.dir_pin = None
-        self.pwm_pin = None
         self.fire_pin = None
+        self.pwm_pin = None
 
         self.stopped = False
-        self.onborder = False
+        self.onborder = 0
         self.armed = False
         self.slowmode = False
         self.sleep = Event()
@@ -43,6 +43,14 @@ class BaseMotion(Thread):
         self.angle = 0
         self.update = self.sleep.set
 
+    def rotate(self, value):
+        self.rotation = value
+        self.update()
+
+    def step(self, dir):
+        sign = -1 if not dir or dir < 0 else 1
+        self.rotate(sign * 1 / self.revolution)
+
     def fire(self):
         if not self.armed: return
         self.fire_pin(True)
@@ -51,7 +59,7 @@ class BaseMotion(Thread):
 
     def stop(self):
         self.stopped = True
-        self.sleep.set()
+        self.update()
         self.join()
 
     def run(self):
@@ -65,8 +73,8 @@ class BaseMotion(Thread):
 
             self.enable_pin(False)
             self.step_pin(False)
-            self.pwm_pin(self.min_pwm + self.angle * self.pwm_range)
             self.dir_pin((self.rotation > 0) ^ self.reverse)
+            # self.pwm_pin(self.min_pwm + self.angle * self.pwm_range)
 
             if abs(self.rotation) < 1 / self.revolution:
                 self.rotation = 0
@@ -75,10 +83,10 @@ class BaseMotion(Thread):
 
             delta = copysign(1 / self.revolution, self.rotation)
             if self.rotation_range and abs(self.abs_rotation - delta) > self.rotation_range:
-                self.onborder = True
+                self.onborder = -1 if self.abs_rotation < 0 else 1
                 continue
 
-            self.onborder = False
+            self.onborder = 0
             self.rotation -= delta
             self.abs_rotation -= delta
             self.step_pin(True)
@@ -92,8 +100,8 @@ class FakeMotion(BaseMotion):
         self.enable_pin = lambda x: print('[M] ENABLE PIN ->', 'ON' if x else 'OFF')
         self.step_pin = lambda x: print('[M] STEP PIN ->', 'ON' if x else 'OFF')
         self.dir_pin = lambda x: print('[M] DIR PIN ->', 'ON' if x else 'OFF')
-        self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
         self.fire_pin = lambda x: print('[M] FIRE PIN ->', 'ON' if x else 'OFF')
+        self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
 
 
 class OPiMotion(BaseMotion):
@@ -105,14 +113,14 @@ class OPiMotion(BaseMotion):
         GPIO.setup(pins['ENABLE'], GPIO.OUT)
         GPIO.setup(pins['STEP'], GPIO.OUT)
         GPIO.setup(pins['DIR'], GPIO.OUT)
-        # GPIO.setup(pins['PWM'], GPIO.OUT)
         GPIO.setup(pins['FIRE'], GPIO.OUT)
+        # GPIO.setup(pins['PWM'], GPIO.OUT)
 
         self.enable_pin = lambda x: GPIO.output(pins['ENABLE'], x)
         self.step_pin = lambda x: print('step') or GPIO.output(pins['STEP'], x)
         self.dir_pin = lambda x: GPIO.output(pins['DIR'], x)
-        self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
         self.fire_pin = lambda x: GPIO.output(pins['FIRE'], x)
+        # self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
 
     def stop(self):
         super().stop()
