@@ -59,11 +59,11 @@ CAMERA_DISTORTION = np.array([             # Camera distortion coefficients (cal
 
 MARKERS_DICT = cv2.aruco.DICT_6X6_50       # Aruco markers dict
 MARKER_LENGTH = 33                         # Marker side length (mm)
-AIM_THRESHOLD = 5
 
-LOGIC_HANDLERS = {
-    'NaiveTrackingHandler'
-}
+LOGIC_HANDLERS = [
+    'NaiveTrackingHandler',
+    'FaceTrackingHandler',
+]
 
 
 class Core(BaseStream):
@@ -89,16 +89,11 @@ class Core(BaseStream):
         self.faces = []
 
     def set_handler(self, name):
+        print('SWITCHING HANDLER TO:', name)
         if self.handler is not None: self.handler.stop()
+        if name is None: self.handler = None; return
         self.handler = self.handlers[name](self)
         self.handler.start()
-
-    def aim_to_coords(self, x, y):  # TODO
-        delta = WIDTH / 2 - x
-        if abs(delta) <= AIM_THRESHOLD: return
-        if delta < 0: self.motion.rotation = -1; print('left')
-        else: self.motion.rotation = 1; print('right')
-        self.motion.update()
 
     def process_markers(self):
         corners, ids, _ = cv2.aruco.detectMarkers(self.gray, self.aruco_dict)
@@ -168,11 +163,16 @@ class Core(BaseStream):
         self.motion.stop()
         print('[CORE] STOPPING SERVER THREAD...')
         self.server.stop()
+        print('[CORE] STOPPING HANDLER THREAD...')
+        if self.handler: self.handler.stop()
         print('[CORE] TERMINATED')
 
 
 class NaiveTrackingHandler(Thread):
     name = 'Naive Tracker'
+
+    THRESHOLD = 10  # px
+    RATIO = 15      # steps
 
     def __init__(self, core):
         super().__init__()
@@ -193,7 +193,43 @@ class NaiveTrackingHandler(Thread):
             self.event.clear()
             if not self.core.markers: continue
             marker = self.core.markers[0]
-            self.core.aim_to_coords(*marker['center'])
+            x = marker['center'][0]
+            delta = x - WIDTH // 2
+            if abs(delta) < self.THRESHOLD: continue
+            steps = (delta / (WIDTH / 2)) * self.RATIO
+            self.motion.step(steps)
+
+
+class FaceTrackingHandler(Thread):
+    name = 'Face Tracker'
+
+    THRESHOLD = 2
+    RATIO = 15
+
+    def __init__(self, core):
+        super().__init__()
+        self.core = core
+        self.motion = self.core.motion
+        self.event = self.core.subscribe()
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+        self.event.set()
+        self.join()
+
+    def run(self):
+        while not self.stopped:
+            self.event.wait()
+            if self.stopped: break
+            self.event.clear()
+            if not self.core.faces: continue
+            face = self.core.faces[0]
+            x = face[0] + face[2]
+            delta = x - WIDTH // 2
+            if abs(delta) < self.THRESHOLD: continue
+            steps = (delta / (WIDTH / 2)) * self.RATIO
+            self.motion.step(steps)
 
 
 if __name__ == '__main__':

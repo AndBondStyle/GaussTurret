@@ -46,7 +46,7 @@ class Server(Thread):
             'faces': self.core.faces,
             'markers': self.core.markers,
             'handlers': list(self.core.handlers.keys()),
-            'handler': self.core.handler,
+            'handler': self.core.handler and self.core.handler.name,
         }
         return web.json_response(data)
 

@@ -70,6 +70,7 @@
             border: 2px solid #cdcfde;
             display: block;
             height: 50vh;
+            min-width: 50vh;
         }
 
         .right {
@@ -83,6 +84,15 @@
 
         .right > * {
             margin: 15px;
+        }
+
+        .pickhandler {
+            justify-content: center !important;
+            align-items: stretch;
+        }
+
+        .pickhandler > * {
+            margin: 7.5px !important;
         }
 
         .controls {
@@ -104,18 +114,18 @@
 <body>
     <div id="app">
         <img v-if="stream" src="/stream" class="stream"/>
-        <div class="right">
+        <div v-if="!pickhandler" class="right">
             <div class="status">
                 <div class="button" @click="stream = !stream">
                     STREAM: {{ stream ? 'ON' : 'OFF'}}
                 </div>
-                <div class="button" @click="api('motion.slowmode', !status.slowmode)">
+                <div class="button" @click="api('motion.slowmode', !status.slowmode, 'set')">
                     SPEED: {{ status.slowmode ? 'SLOW' : 'NORM'}}
                 </div>
                 <div class="button" @click="stepmode = !stepmode">
                     MOVEMODE: {{ stepmode ? 'STEP' : 'HOLD' }}
                 </div>
-                <div class="button">-</div>
+                <div class="button" @click="pickhandler = true">PICK HANDLER</div>
             </div>
             <div class="controls">
                 <div></div>
@@ -123,7 +133,7 @@
                 <div></div>
                 <div class="button"
                      @mousedown="move('left')"
-                     @mouseup="if (!stepmode) api('motion.rotation', 0)"
+                     @mouseup="if (!stepmode) api('motion.rotate', [0])"
                      v-bind:class="{disabled: status.onborder && status.rotation < 0}"
                 >←</div>
                 <div class="button"
@@ -132,7 +142,7 @@
                 >FIRE</div>
                 <div class="button"
                      @mousedown="move('right')"
-                     @mouseup="if (!stepmode) api('motion.rotation', 0)"
+                     @mouseup="if (!stepmode) api('motion.rotate', [0])"
                      v-bind:class="{disabled: status.onborder && status.rotation > 0}"
                 >→</div>
                 <div></div>
@@ -140,14 +150,26 @@
                 <div></div>
             </div>
         </div>
+        <div v-if="pickhandler" class="right pickhandler">
+            <div class="button"
+                 v-for="handler in status.handlers"
+                 @click="api('core.set_handler', [handler])"
+            >{{ '[' + (handler == status.handler ? 'x' : ' ') + '] ' + handler }}</div>
+            <div class="status" style="width: auto">
+                <div></div><div></div>
+                <div class="button" @click="api('core.set_handler', [null])">RESET</div>
+                <div class="button" @click="pickhandler = false">CLOSE</div>
+            </div>
+        </div>
     </div>
     <script>
-        new Vue({
+        var app = new Vue({
             el: '#app',
             data: {
                 status: {},
                 stream: true,
                 stepmode: true,
+                pickhandler: false,
             },
             async mounted() {
                 let update = async function () {
@@ -158,7 +180,7 @@
                 await update.bind(this)();
             },
             methods: {
-                api(target, value, action='set') {
+                api(target, value, action='call') {
                     axios.post('/api', {target, value, action})
                 },
                 move(dir) {

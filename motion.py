@@ -43,6 +43,15 @@ class BaseMotion(Thread):
         self.angle = 0
         self.update = self.sleep.set
 
+    def rotate(self, value):
+        self.rotation = value
+        self.update()
+
+    def step(self, value):
+        value = value or 0
+        rotation = value / self.revolution
+        self.rotate(rotation)
+
     def fire(self):
         if not self.armed: return
         self.fire_pin(True)
