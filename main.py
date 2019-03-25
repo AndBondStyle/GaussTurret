@@ -14,10 +14,10 @@ FLIP = None                  # Frame flip mode (0 = H | 1 = V | -1 = both | None
 
 MOTION = FakeMotion          # Motion handler
 MOTION_PINS = {
-    'ENABLE': 3,            # A4988 enable pin
+    'ENABLE': 3,             # A4988 enable pin
     'STEP': 5,               # A4988 step pin
     'DIR': 7,                # A4988 dir pin
-    'PWM': 11,                # Servo PWM pin
+    'PWM': 11,               # Servo PWM pin
     'FIRE': 24,              # Fire pin
 }
 MOTION_PARAMS = {
@@ -25,7 +25,7 @@ MOTION_PARAMS = {
     'SLOWSPEED': 5,          # Slow speed (steps per second)
     'REVERSE': False,        # Reverse direction
     'REVOLUTION': 320,       # Steps per full revolution
-    'ROTATION_RANGE': 0,     # Rotation range limit (0 = no limits)
+    'ROTATION_RANGE': 0.5,   # Rotation range limit (0 = no limits)
     'SLEEP_TIMEOUT': 5,      # Time to wait before disabling stepper
     'FIRE_PULSE': 0.1,       # Fire pulse length (seconds)
     'RECHARGE_TIME': 5,      # Aka minimal time between shots
@@ -63,6 +63,7 @@ MARKER_LENGTH = 33                         # Marker side length (mm)
 LOGIC_HANDLERS = [
     'MarkerTrackingHandler',
     'FaceTrackingHandler',
+    'BattleHandler',
 ]
 
 
@@ -100,15 +101,13 @@ class Core(BaseStream):
         self.markers = []
         if ids is None: return
         centers = [np.mean(c[0], axis=0).astype(int).tolist() for c in corners]
-        print('CORNERS:', corners)
-        print('CENTERS:', centers)
         self.markers = [{
             'id': int(id[0]),
             'corners': co.astype(int).tolist(),
             'center': ce
         } for co, id, ce in zip(corners, ids, centers)]
-        rvec, tvec, _ = cv2.aruco.estimatePoseSingleMarkers(corners, MARKER_LENGTH, CAMERA_MATRIX, CAMERA_DISTORTION)
-        for i in self.markers: i.update(rvec=rvec.tolist(), tvec=tvec.tolist())
+        # rvec, tvec, _ = cv2.aruco.estimatePoseSingleMarkers(corners, MARKER_LENGTH, CAMERA_MATRIX, CAMERA_DISTORTION)
+        # for i in self.markers: i.update(rvec=rvec.tolist(), tvec=tvec.tolist())
         cv2.aruco.drawDetectedMarkers(self.frame, corners, borderColor=(0, 0, 255))
 
     def process_faces(self):
@@ -228,16 +227,36 @@ class FaceTrackingHandler(BaseHandler):
 class BattleHandler(BaseHandler):
     name = 'BATTLE HANDLER'
 
-    AIM_OFFSET = 10
-    THRESHOLD = 10
+    OFFSET = 10
+    THRESHOLD = 5
+    CHARGE_TIME = 3
 
     def __init__(self, core):
         super().__init__(core)
         self.last_shot = 0
-        self.eliminated = None
+        self.eliminated = []
+        self.direction = 1
 
     def handle(self):
-        pass
+        if self.core.markers:
+            self.motion.slowmode = False
+            markers = self.core.markers.copy()
+            markers = list(filter(lambda x: x['id'] not in self.eliminated, markers))
+            markers.sort(key=lambda x: x['id'])
+            target = markers[0]
+            delta = target['center'][0] - (WIDTH // 2 + self.OFFSET)
+            now = time.time()
+            if abs(delta) <= self.THRESHOLD:
+                if now - self.last_shot < self.CHARGE_TIME: return
+                self.last_shot = now
+                self.eliminated.append(target['id'])
+                print('FIRE!!!')
+                # self.motion.fire()
+                return
+        else:
+            self.motion.slowmode = True
+            self.motion.rotate(self.direction)
+            if self.motion.onborder: self.direction *= -1
 
 
 if __name__ == '__main__':

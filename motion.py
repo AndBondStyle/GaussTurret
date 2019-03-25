@@ -26,11 +26,11 @@ class BaseMotion(Thread):
         self.max_pwm = params['MAX_PWM']
         self.pwm_range = self.max_pwm - self.min_pwm
 
-        self.enable_pin = None
-        self.step_pin = None
-        self.dir_pin = None
-        self.pwm_pin = None
-        self.fire_pin = None
+        self.enable_pin = lambda x: None
+        self.step_pin = lambda x: None
+        self.dir_pin = lambda x: None
+        self.pwm_pin = lambda x: None
+        self.fire_pin = lambda x: None
 
         self.stopped = False
         self.onborder = False
@@ -98,11 +98,11 @@ class BaseMotion(Thread):
 class FakeMotion(BaseMotion):
     def __init__(self, _, params):
         super().__init__(params)
-        self.enable_pin = lambda x: print('[M] ENABLE PIN ->', 'ON' if x else 'OFF')
-        self.step_pin = lambda x: print('[M] STEP PIN ->', 'ON' if x else 'OFF')
-        self.dir_pin = lambda x: print('[M] DIR PIN ->', 'ON' if x else 'OFF')
-        self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
-        self.fire_pin = lambda x: print('[M] FIRE PIN ->', 'ON' if x else 'OFF')
+        # self.enable_pin = lambda x: print('[M] ENABLE PIN ->', 'ON' if x else 'OFF')
+        self.step_pin = lambda x: x and print('[M] <<< STEP >>>')
+        # self.dir_pin = lambda x: print('[M] DIR PIN ->', 'ON' if x else 'OFF')
+        # self.pwm_pin = lambda x: print('[M] PWM PIN ->', x)
+        self.fire_pin = lambda x: x and print('[M] <<< FIRE >>>')
 
 
 class OPiMotion(BaseMotion):
