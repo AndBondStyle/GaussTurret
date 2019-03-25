@@ -14,11 +14,11 @@ FLIP = None                  # Frame flip mode (0 = H | 1 = V | -1 = both | None
 
 MOTION = FakeMotion          # Motion handler
 MOTION_PINS = {
-    'ENABLE': 11,            # A4988 enable pin
-    'STEP': 3,               # A4988 step pin
-    'DIR': 5,                # A4988 dir pin
-    'PWM': 7,                # Servo PWM pin
-    'FIRE': 13,              # Fire pin
+    'ENABLE': 3,            # A4988 enable pin
+    'STEP': 5,               # A4988 step pin
+    'DIR': 7,                # A4988 dir pin
+    'PWM': 11,                # Servo PWM pin
+    'FIRE': 24,              # Fire pin
 }
 MOTION_PARAMS = {
     'SPEED': 30,             # Normal speed (steps per second)
@@ -61,7 +61,7 @@ MARKERS_DICT = cv2.aruco.DICT_6X6_50       # Aruco markers dict
 MARKER_LENGTH = 33                         # Marker side length (mm)
 
 LOGIC_HANDLERS = [
-    'NaiveTrackingHandler',
+    'MarkerTrackingHandler',
     'FaceTrackingHandler',
 ]
 
@@ -168,68 +168,76 @@ class Core(BaseStream):
         print('[CORE] TERMINATED')
 
 
-class NaiveTrackingHandler(Thread):
-    name = 'Naive Tracker'
+class BaseHandler(Thread):
+    name = 'Base Handler'
+
+    def __init__(self, core):
+        super().__init__()
+        self.core = core
+        self.motion = self.core.motion
+        self.event = self.core.subscribe()
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+        self.event.set()
+        self.join()
+
+    def run(self):
+        while not self.stopped:
+            self.event.wait()
+            if self.stopped: break
+            self.event.clear()
+            self.handle()
+
+    def handle(self): pass
+
+
+class MarkerTrackingHandler(BaseHandler):
+    name = 'Marker Tracker'
 
     THRESHOLD = 10  # px
     RATIO = 15      # steps
 
-    def __init__(self, core):
-        super().__init__()
-        self.core = core
-        self.motion = self.core.motion
-        self.event = self.core.subscribe()
-        self.stopped = False
-
-    def stop(self):
-        self.stopped = True
-        self.event.set()
-        self.join()
-
-    def run(self):
-        while not self.stopped:
-            self.event.wait()
-            if self.stopped: break
-            self.event.clear()
-            if not self.core.markers: continue
-            marker = self.core.markers[0]
-            x = marker['center'][0]
-            delta = x - WIDTH // 2
-            if abs(delta) < self.THRESHOLD: continue
-            steps = (delta / (WIDTH / 2)) * self.RATIO
-            self.motion.step(steps)
+    def handle(self):
+        if not self.core.markers: return
+        marker = self.core.markers[0]
+        x = marker['center'][0]
+        delta = x - WIDTH // 2
+        if abs(delta) < self.THRESHOLD: return
+        steps = (delta / (WIDTH / 2)) * self.RATIO
+        self.motion.step(steps)
 
 
-class FaceTrackingHandler(Thread):
+class FaceTrackingHandler(BaseHandler):
     name = 'Face Tracker'
 
-    THRESHOLD = 2
+    THRESHOLD = 10
     RATIO = 15
 
+    def handle(self):
+        if not self.core.faces: return
+        face = self.core.faces[0]
+        x = face[0] + face[2]
+        delta = x - WIDTH // 2
+        if abs(delta) < self.THRESHOLD: return
+        steps = (delta / (WIDTH / 2)) * self.RATIO
+        self.motion.step(steps)
+
+
+class BattleHandler(BaseHandler):
+    name = 'BATTLE HANDLER'
+
+    AIM_OFFSET = 10
+    THRESHOLD = 10
+
     def __init__(self, core):
-        super().__init__()
-        self.core = core
-        self.motion = self.core.motion
-        self.event = self.core.subscribe()
-        self.stopped = False
+        super().__init__(core)
+        self.last_shot = 0
+        self.eliminated = None
 
-    def stop(self):
-        self.stopped = True
-        self.event.set()
-        self.join()
-
-    def run(self):
-        while not self.stopped:
-            self.event.wait()
-            if self.stopped: break
-            self.event.clear()
-            if not self.core.faces: continue
-            face = self.core.faces[0]
-            x = face[0] + face[2]
-            delta = x - WIDTH // 2
-            if abs(delta) < self.THRESHOLD: continue
-            steps = (delta / (WIDTH / 2)) * self.RATIO
-            self.motion.step(steps)
+    def handle(self):
+        pass
 
 
 if __name__ == '__main__':
